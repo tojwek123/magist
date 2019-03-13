@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import pyrealsense as pyrs
 import time
+import math
 
 def get_fps():
     current_time = time.time()
@@ -37,6 +38,7 @@ def main():
             matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
             
             overall_displacement = [0, 0]  
+            overall_angle = 0
             
             last_color, last_depth = get_frames(dev)
             last_kp, last_des = feature_detector.detectAndCompute(last_color, None)
@@ -45,52 +47,65 @@ def main():
                 fps = get_fps()
 
                 color, depth = get_frames(dev)
+                cv2.imshow('color', color)
                 kp, des = feature_detector.detectAndCompute(color, None)
                 
-                if des is None or last_des is None:
-                    continue
+                if des is not None and last_des is not None:
+                    matches = matcher.match(des, last_des)
+                    matches = sorted(matches, key=lambda x: x.distance)
+                    
+                    #Get best X percentage of results
+                    matches = matches[:int(0.1 * len(matches))]
+                    
+                    pt = []
+                    last_pt = []
 
-                matches = matcher.match(des, last_des)
-                matches = sorted(matches, key=lambda x: x.distance)
+                    for match in matches:
+                        pt.append(kp[match.queryIdx].pt)
+                        last_pt.append(last_kp[match.trainIdx].pt)
+
+                    pt = np.array(pt)
+                    last_pt = np.array(last_pt)
+
+                    if len(matches) == 0:   
+                        continue
+
+                    res = cv2.estimateRigidTransform(pt, last_pt, False, 500, 0.5, 3)
+                    #print(res)     
+
+                    
+                    if res is not None:                   
+                        angle = math.atan2(-res[0][1], res[0][0])
+                        overall_angle += angle
+                        print(overall_angle * 180 / math.pi)
+
+                        overall_displacement[0] += res[0][2]
+                        overall_displacement[1] += res[1][2]                   
+
+                    if overall_displacement[0] > 300:
+                        overall_displacement[0] = 300
+                    elif overall_displacement[0] < -300:
+                        overall_displacement[0] = -300
+                    if overall_displacement[1] > 300:
+                        overall_displacement[1] = 300
+                    elif overall_displacement[1] < -300:
+                        overall_displacement[1] = -300
+
+                    visualization = np.ones((600, 600, 3), dtype=np.uint8) * 255
+                    cv2.circle(visualization, (int(overall_displacement[0] + 300), int(overall_displacement[1] + 300)), 3, (0,0,255), 1, -1)
+                    cv2.imshow('vis', visualization)
+
+                    preview = cv2.drawMatches(color, kp, last_color, last_kp, matches, None, flags=2)
+
+                    #color = cv2.drawKeypoints(color, kp, None, (255,0,0), 4)
+                    
+                    cv2.putText(preview, '{:.2f} FPS'.format(fps), (0, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0))
+
+                    cv2.imshow('preview', preview)
                 
-                #Get best X percentage of results
-                matches = matches[:int(0.1 * len(matches))]
-            
-                displacements = get_displacements(kp, last_kp, matches)
-                
-                constrained_matches = []
-                current_displacement = [0, 0]           
- 
-                for match, displacement in zip(matches, displacements):
-                    if displacement[2] < 15:
-                        constrained_matches.append(match)
-                        
-                        current_displacement[0] += displacement[0]
-                        current_displacement[1] += displacement[1]
-               
-                if len(constrained_matches) > 0:
-                    current_displacement[0] /= len(constrained_matches)
-                    current_displacement[1] /= len(constrained_matches)
-            
-                overall_displacement[0] += current_displacement[0]
-                overall_displacement[1] += current_displacement[1]
-    
-                print(overall_displacement) 
-
-                visualization = np.ones((600, 600, 3), dtype=np.uint8) * 255
-                cv2.circle(visualization, (int(overall_displacement[0] + 300), int(overall_displacement[1] + 300)), 3, (0,0,255), 1, -1)
-                cv2.imshow('vis', visualization)
-
-                preview = cv2.drawMatches(color, kp, last_color, last_kp, constrained_matches, None, flags=2)
-
                 last_color, last_depth = color, depth
                 last_kp, last_des = kp, des
-                #color = cv2.drawKeypoints(color, kp, None, (255,0,0), 4)
-                
-                cv2.putText(preview, '{:.2f} FPS'.format(fps), (0, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0))
-
-                cv2.imshow('preview', preview)
-
+                    
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
 
