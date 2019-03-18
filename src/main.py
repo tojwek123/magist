@@ -3,6 +3,8 @@ import numpy as np
 import pyrealsense as pyrs
 import time
 import math
+from basic_odometry import Basic_Odometry
+
 
 def get_fps():
     current_time = time.time()
@@ -18,15 +20,6 @@ def get_frames(dev):
     
     return color, depth
 
-def get_points_from_matches(kp2, kp1, matches):
-    pts2, pts1 = [], []
-    
-    for match in matches:
-        pts2.append(kp2[match.queryIdx].pt)
-        pts1.append(kp1[match.trainIdx].pt)
-
-    return np.array(pts2), np.array(pts1)
-
 def limit_value(value, lower_bound, upper_bound):
     if value < lower_bound:
         value = lower_bound
@@ -41,7 +34,9 @@ def main():
             #Create Feature Detector and Matcher
             feature_detector = cv2.ORB_create()
             matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-            
+           
+            odometry = Basic_Odometry(feature_detector, matcher)            
+
             #Variable for position
             position = {
                 'roll' : 0,
@@ -62,55 +57,25 @@ def main():
                     position['z']    = 0
 
             cv2.setMouseCallback('Roll and z', roll_and_z_preview_mouse_cb)
- 
-            #Data from previous match
-            color1, depth1 = None, None
-            kp1, des1 = None, None
-            
+
             while True:
                 #Store FPS value to check performance
                 fps = get_fps()
 
                 #Get new frames and detect features
-                color2, depth2 = get_frames(dev)
-                kp2, des2 = feature_detector.detectAndCompute(color2, None)
-               
+                color, depth = get_frames(dev)
+
                 #Display frames
-                color_preview = color2.copy()
+                color_preview = color.copy()
                 cv2.putText(color_preview, '{:.2f} FPS'.format(fps), (0,15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0))
                 cv2.imshow('Color', color_preview)
 
- 
-                #Process only if descriptors are not None
-                if des2 is not None and des1 is not None:
-
-                    #Match points from 2 frames and sort them by distance (score)
-                    matches = matcher.match(des2, des1)
-                    matches = sorted(matches, key=lambda x: x.distance)
-                    
-                    #Get best X percentage of results
-                    matches = matches[:int(0.05 * len(matches))]
- 
-                    #Process further only if there are some matches
-                    if len(matches) > 0:   
-                        pt2, pt1 = get_points_from_matches(kp2, kp1, matches)
-                        tfMat = cv2.estimateRigidTransform(pt2, pt1, False, 500, 0.5, 3)
-                        
-                        if tfMat is not None:
-                            a11, a12, b1 =  tfMat[0][0], tfMat[0][1], tfMat[0][2]
-                            a12, a11, b2 = -tfMat[1][0], tfMat[1][1], tfMat[1][2]              
+                displacement = odometry.get_displacement(color)
                             
-                            #Calculate position change and update overall position
-                            d_roll = math.atan2(-a12, a11)
-                            d_z    = b2
-                            
-                            position['roll'] += d_roll
-                            position['z']    += d_z
-                    
-                    #Display matches
-                    matches_preview = cv2.drawMatches(color2, kp2, color1, kp1, matches, None, flags=2)
-                    cv2.imshow('Matches', matches_preview)
-
+                if displacement is not None:
+                    position['roll'] += displacement['roll']
+                    position['z']    += displacement['vertical']
+                 
                    
                 #Display roll and z visualization
                 scene_size = (640, 480)
@@ -125,15 +90,6 @@ def main():
 
                 cv2.imshow('Roll and z', roll_and_z_preview)
 
-                #        visualization = np.ones((600, 600, 3), dtype=np.uint8) * 255
-                #        cv2.circle(visualization, (int(overall_displacement[0] + 300), int(overall_displacement[1] + 300)), 3, (0,0,255), 1, -1)
-                #       cv2.imshow('vis', visualization)
-
-                #Save current frame only if there was any keypoint 
-                if des2 is not None:
-                    color1, depth1 = color2, depth2
-                    kp1, des1 = kp2, des2
-                    
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
 
