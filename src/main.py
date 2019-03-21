@@ -58,12 +58,18 @@ def main():
 
             cv2.setMouseCallback('Roll and z', roll_and_z_preview_mouse_cb)
 
+            bottom_cap = cv2.VideoCapture(14)
+            bottom_odometry = Basic_Odometry(feature_detector, matcher)
+
             while True:
                 #Store FPS value to check performance
                 fps = get_fps()
 
                 #Get new frames and detect features
                 color, depth = get_frames(dev)
+                ret, bottom = bottom_cap.read()
+                cv2.imshow('bottom', bottom)
+                bottom_odometry.get_displacement(bottom)
 
                 #Display frames
                 color_preview = color.copy()
