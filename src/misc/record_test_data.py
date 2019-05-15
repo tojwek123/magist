@@ -4,6 +4,7 @@ import pyrealsense as pyrs
 from pyrealsense import offline
 import os
 import datetime
+import dronekit
 
 import ctypes
 from pyrealsense.stream import * 
@@ -16,22 +17,22 @@ Base_Directory = '/home/aero/flying-tests/record-data'
 Streams = {
     'color': {
         'fourcc': 'XVID',
-        'fps': 30,
-        'size': (640, 480)
+        'fps': 15,
+        'size': (1920, 1080)
     },
     'depth': {
         'fourcc': 'XVID',
-        'fps': 30,
+        'fps': 15,
         'size': (640, 480)
     },
     'infrared': {
         'fourcc': 'XVID',
-        'fps': 30,
+        'fps': 15,
         'size': (640, 480)
     },
     'infrared2': {
         'fourcc': 'XVID',
-        'fps': 30,
+        'fps': 15,
         'size': (640, 480)
     }
 }
@@ -47,19 +48,31 @@ class InfraredStream2(Stream):
         self.dtype = ctypes.c_uint8
         super(InfraredStream2, self).__init__(name, self.native, self.stream, width, height, self.format, fps)
 
-def main():
-    streams = [ColorStream(), DepthStream(), InfraredStream(), InfraredStream2()]
+imu_file = None
 
+def on_msg(vehicle, name, msg):
+    global imu_file
+    imu_file.write('{} | {}\n'.format(msg, vehicle.attitude))
+
+def main():
+    streams = [ColorStream('color', 1920, 1080, 15), DepthStream(), InfraredStream(), InfraredStream2()]
+
+    
     with pyrs.Service() as serv:
         with serv.Device(0, streams) as dev:
             
-            current_time_str = '{0:%Y-%m-%d_%H-%M-%S}'.format(datetime.datetime.now()) 
+            current_time_str = '{0:%Y-%m-%d_%H-%M-%S-%f}'.format(datetime.datetime.now()) 
             write_directory = os.path.join(Base_Directory, current_time_str) 
 
             try:
             	os.makedirs(write_directory)            
             except FileExistsError:
                 pass
+            
+            global imu_file
+            imu_file = open(os.path.join(write_directory, 'imu.txt'), 'w')
+            vehicle = dronekit.connect('tcp:127.0.0.1:5760')
+            vehicle.add_message_listener('HIGHRES_IMU', on_msg)
 
             stream_writers = {}
 
@@ -102,6 +115,9 @@ def main():
                     print('Keyboard interrupt - stopping...')
                     print('')
                     break                
+
+            vehicle.remove_message_listener('HIGHRES_IMU', on_msg)
+            imu_file.close()
 
             for writer in stream_writers:
                 stream_writers[writer].release()
