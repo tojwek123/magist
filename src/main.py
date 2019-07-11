@@ -58,8 +58,10 @@ def main():
 
             cv2.setMouseCallback('Roll and z', roll_and_z_preview_mouse_cb)
 
-            bottom_cap = cv2.VideoCapture(14)
-            bottom_odometry = Basic_Odometry(feature_detector, matcher)
+            #bottom_cap = cv2.VideoCapture(14)
+            #bottom_odometry = Basic_Odometry(feature_detector, matcher)
+
+            horizontal = 0
 
             while True:
                 #Store FPS value to check performance
@@ -67,21 +69,24 @@ def main():
 
                 #Get new frames and detect features
                 color, depth = get_frames(dev)
-                ret, bottom = bottom_cap.read()
-                cv2.imshow('bottom', bottom)
-                bottom_odometry.get_displacement(bottom)
+                #ret, bottom = bottom_cap.read()
+                #cv2.imshow('bottom', bottom)
+                #bottom_odometry.get_displacement(bottom)
+                
+                cv2.imshow('depth', depth / 64.)
 
                 #Display frames
                 color_preview = color.copy()
                 cv2.putText(color_preview, '{:.2f} FPS'.format(fps), (0,15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0))
                 cv2.imshow('Color', color_preview)
 
-                displacement = odometry.get_displacement(color)
+                displacement = odometry.get_displacement(color, depth)
                             
                 if displacement is not None:
                     position['roll'] += displacement['roll']
                     position['z']    += displacement['vertical']
-                 
+                    horizontal += displacement['horizontal']
+                    print(horizontal)                  
                    
                 #Display roll and z visualization
                 scene_size = (640, 480)

@@ -23,7 +23,8 @@ class Basic_Odometry:
 
         self._last_keypoints = None        
         self._last_descriptors = None
-        self._last_frame = None
+        self._last_color = None
+        self._last_depth = None
 
     def set_config(self, config):
         """Set odometry configuration
@@ -33,7 +34,7 @@ class Basic_Odometry:
         """
         self._config = config
 
-    def get_displacement(self, frame):
+    def get_displacement(self, color, depth):
         """Calculate displacement basing on new frame
 
         Params:
@@ -44,15 +45,29 @@ class Basic_Odometry:
 
         """
         displacement = None
-        keypoints, descriptors = self._feature_detector.detectAndCompute(frame, None)
+        keypoints, descriptors = self._feature_detector.detectAndCompute(color, None)
         
         if descriptors is not None and self._last_descriptors is not None:
             matches = self._matcher.match(descriptors, self._last_descriptors)
             matches = self._select_matches(matches)           
+            points, last_points = self._get_points_from_matches(keypoints, self._last_keypoints, matches)
+            t = []
+            horizontal = 0
+            for i in range(len(matches)):
+                d1 = depth[int(points[i][1]), int(points[i][0])]
+                d2 = self._last_depth[int(last_points[i][1]), int(points[i][0])]
+                #print(d1, d2)
+                
+                if d1 != 0 and abs(d1-d2) < 10:
+                    t.append(matches[i])
+                    horizontal += (points[i][0] - last_points[i][0]) * d1
+            
+            matches = t
+            horizontal /= len(t) 
         
             if len(matches) > 0:
                 if self._config['show_matches']:
-                    matches_preview = cv2.drawMatches(frame, keypoints, self._last_frame, self._last_keypoints, matches, None, flags=2)
+                    matches_preview = cv2.drawMatches(color, keypoints, self._last_color, self._last_keypoints, matches, None, flags=2)
                     cv2.imshow('Basic_Odometry_matches_preview', matches_preview)
                         
                 points, last_points = self._get_points_from_matches(keypoints, self._last_keypoints, matches)
@@ -66,7 +81,7 @@ class Basic_Odometry:
  
                     displacement = {
                         'roll': roll,
-                        'horizontal': b1,
+                        'horizontal': horizontal,#b1,
                         'vertical': b2,
                         'depth': math.sqrt(a11**2+a12**2) * (-1 if a11 < 0 else 1)
                     }
@@ -74,7 +89,8 @@ class Basic_Odometry:
         if descriptors is not None:        
             self._last_keypoints = keypoints
             self._last_descriptors = descriptors
-            self._last_frame = frame
+            self._last_color = color
+            self._last_depth = depth
             
         return displacement
 
