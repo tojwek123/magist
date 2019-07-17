@@ -3,6 +3,7 @@ from machine import I2C
 import time
 import network
 import socket
+import select
 import random
 
 class Lidar:
@@ -29,7 +30,7 @@ class Lidar:
     
     def measure(self):
         # self.write_reg(Lidar.REG_CMD, Lidar.CMD_GET_DIST)
-        # status = 0#self.read_reg(Lidar.REG_STATUS)
+        # status = self.read_reg(Lidar.REG_STATUS)
         
         # while (status & Lidar.STATUS_BUSY_MASK) != 0:
             # status != self.read_reg(Lidar.REG_STATUS)
@@ -41,19 +42,81 @@ class Lidar:
         
         return dist_cm
 
+class AsyncTcpServer:
+       
+    def __init__(self, on_client_connected, on_client_disconnected, on_received_from_client, recv_buffer_size=128):
+        self._server_sock = None
+        self._client_sock = None
+        self._read_list = None
+        self._on_client_connected = on_client_connected
+        self._on_client_disconnected = on_client_disconnected
+        self._on_received_from_client = on_received_from_client
+        self._recv_buffer_size = recv_buffer_size
+        self._is_listening = False
+        
+    def start_listening(self, addr, port):
+        if self._is_listening:
+            stop_listening()
+        
+        self._server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._server_sock.setblocking(False)
+        self._server_sock.bind((addr, port))
+        self._server_sock.listen(1)
+        self._read_list = [self._server_sock]
+        self._is_listening = True
+        
+    def stop_listening(self):
+        if self._is_listening:
+            for sock in readable:
+                sock.close()
+            self._is_listening = False
+        
+    def process(self):
+        if self._is_listening:
+            readable, writable, errored = select.select(self._read_list, [], [], 0)
+            
+            for sock in readable:
+                if sock is self._server_sock:
+                    client_sock, addr = self._server_sock.accept()
+                    self._read_list.append(client_sock)
+                    if self._on_client_connected is not None:
+                        self._on_client_connected(client_sock, addr)
+                else:
+                    recv_data = sock.recv(self._recv_buffer_size)
+                    if recv_data:
+                        if self._on_received_from_client is not None:
+                            self._on_received_from_client(sock, recv_data)
+                    else:
+                        sock.close()
+                        self._read_list.remove(sock)
+                        if self._on_client_disconnected is not None:
+                            self._on_client_disconnected(sock, recv_data)
+
 class App_State:
     DISCONNECTED = 1
     CONNECTING = 2
     GOT_CONNECTION = 3
-    CONNECTED = 4    
+    CONNECTED = 4
+    
+def on_tcp_client_connected(client_sock, addr):
+    print('New client connected, sock: {}, addr: {}'.format(client_sock, addr))
 
+def on_client_disconnected(client_sock):
+    print('Client disconnected, sock: {}'.format(client_sock))
+    
+def on_received_from_client(client_sock, recv_data):
+    print('Received from client, sock: {}, data: {}'.format(client_sock, recv_data))
+    
 def main():
     time.sleep(1)
 
     print('Running...')
 
-    led_pin = Pin(2, Pin.OUT)
     lidar = Lidar()
+    tcp_server = AsyncTcpServer(on_tcp_client_connected,
+                                on_client_disconnected,
+                                on_received_from_client)
+    led_pin = Pin(2, Pin.OUT)
     sta_if = network.WLAN(network.STA_IF)
     sta_if.active(True)
     
@@ -77,9 +140,11 @@ def main():
             print('Connected')
             print('Network config: {}'.format(sta_if.ifconfig()))
             udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            tcp_server.start_listening('0.0.0.0', 6868)
             app_state = App_State.CONNECTED
         elif App_State.CONNECTED == app_state:
             if sta_if.isconnected():
+                tcp_server.process()
                 distance = None                
                 try:
                     distance = lidar.measure()
@@ -95,6 +160,8 @@ def main():
             else:
                 print('Connection with AP lost')
                 app_state = App_State.DISCONNECTED
+                udp_socket.close()
+                tcp_server.stop_listening()
         
         
 if __name__ == '__main__':
