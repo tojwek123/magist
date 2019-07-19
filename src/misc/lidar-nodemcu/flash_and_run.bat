@@ -2,20 +2,21 @@
 
 SET COM_PORT=%1
 SET BAUD_RATE=115200
-SET FILE_NAME=%2
+SET FILES_TO_UPLOAD=("main.py", "asynctcpserver.py", "lidarlite.py")
 
-echo Kill putty
-taskkill /im putty.exe /f > NUL
+REM echo Kill putty
+REM taskkill /im putty.exe /f > NUL
 timeout 1 > NUL
-
-echo Upload script "%FILE_NAME%"
-ampy -p %COM_PORT% -b %BAUD_RATE% put main.py
+for %%i in %FILES_TO_UPLOAD% do (
+    echo Upload script %%i
+    ampy -p %COM_PORT% -b %BAUD_RATE% put %%i
+)
 
 echo Reset board
 ampy -p %COM_PORT% -b %BAUD_RATE% reset
 
-echo Start script "%FILE_NAME%"
-start ampy -p %COM_PORT% -b %BAUD_RATE% run %FILE_NAME%
+echo Start "main.py"
+start ampy -p %COM_PORT% -b %BAUD_RATE% run "main.py"
 echo Wait a moment for script to start
 
 timeout 2 > NUL
