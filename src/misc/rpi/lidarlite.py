@@ -42,8 +42,9 @@ def main():
     while True:
         distance_cm = lidar.measure()
         print('Distance: {} cm'.format(distance_cm))
-        time.sleep(0.1)
+        time.sleep(0.05)
 
 if __name__ == '__main__':
     main()
+
 

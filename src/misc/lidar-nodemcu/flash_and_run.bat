@@ -2,10 +2,10 @@
 
 SET COM_PORT=%1
 SET BAUD_RATE=115200
-SET FILES_TO_UPLOAD=("main.py", "asynctcpserver.py", "lidarlite.py")
+SET FILES_TO_UPLOAD=("main.py", "sweep.py", "lidarlite.py")
 
-REM echo Kill putty
-REM taskkill /im putty.exe /f > NUL
+echo Kill putty
+taskkill /im putty.exe /f > NUL
 timeout 1 > NUL
 for %%i in %FILES_TO_UPLOAD% do (
     echo Upload script %%i
