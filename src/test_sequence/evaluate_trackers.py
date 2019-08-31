@@ -3,7 +3,7 @@ import numpy as np
 import os
 import time
 
-show_frames = True
+show_frames = False
 
 def main():
     starting_bb = (478, 303, 844-478, 668-303)
