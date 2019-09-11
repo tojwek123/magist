@@ -56,18 +56,17 @@ class Sweep:
     def _task(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.bind(('', Sweep.UDP_PORT))
-        s.settimeout(1)
+        s.settimeout(2)
         
         while self._running:
             try:
                 (data, addr) = s.recvfrom(32 * 1024)
                 scan = []
-        
                 for i in range(len(data) / 7):
                     sample = struct.unpack('>LHB', data[:7])
                     scan.append(sample)
                     data = data[7:]
-                
+ 
                 if self._on_reading is not None:
                     self._on_reading(scan)
             except socket.timeout:
