@@ -3,6 +3,7 @@ import numpy as np
 import socket
 import struct
 import pickle
+import sys
 
 mouse_pressed = False
 bb = [0,0,0,0]
@@ -49,7 +50,7 @@ def main():
     was_pressed = False
     
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect(('127.0.0.1', 7171))
+    sock.connect((sys.argv[1], 7171))
     sock.settimeout(0.1)
     
     READ_INFO = 1
@@ -74,7 +75,7 @@ def main():
         
         if READ_INFO == state:
             if len(data) > 36:
-                (frame_length, *tracker_bb, control_x, control_y) = struct.unpack('>LLLLLdd', data[:36])
+                (frame_length, *tracker_bb, control_x, control_y) = struct.unpack('>LllLLdd', data[:36])
                 print(frame_length, tracker_bb, control_x, control_y)
                 data = data[36:]
                 state = READ_FRAME
